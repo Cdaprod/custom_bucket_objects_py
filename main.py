@@ -1,0 +1,218 @@
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any
+import pandas as pd
+import ast
+import os
+import yaml
+import markdown2
+import re
+from langchain.agents import AgentExecutor, tool
+from langchain.llms import OpenAI
+from langchain.schema.runnable import Object, Text
+from langchain.runners import Document
+from langchain.prompts import StringPromptTemplate
+from langchain.document_loaders import UnstructuredMarkdownLoader
+
+class SourceCode(BaseModel):
+    id: str = Field(description="Unique identifier for the source code object.")
+    imports: List[str] = Field(description="List of extracted required packages.")
+    classes: List[str] = Field(description="List of extracted classes from the code.")
+    code: str = Field(description="Source code snippets.")
+    syntax: str = Field(description="The programming language syntax/extension (e.g., Python).")
+    context: str = Field(description="Any extracted text, markdown, comments, or docstrings.")
+    metadata: dict = Field(description="Extracted or generated metadata tags for top-level cataloging and code object management.")
+
+class Table(BaseModel):
+    headers: List[str] = Field(description="Headers of the table")
+    rows: List[Dict[str, Any]] = Field(description="Rows of the table, each row being a dictionary")
+
+class MarkdownDocument(BaseModel):
+    metadata: Dict[str, Any] = Field(description="Metadata of the document")
+    tables: List[Table] = Field(description="List of tables in the document")
+    code_blocks: List[SourceCode] = Field(description="List of code blocks in the document")
+    content: str = Field(description="The textual content of the document")
+
+@tool
+def parse_yaml_metadata(yaml_content: str) -> dict:
+    try:
+        return yaml.safe_load(yaml_content) or {}
+    except yaml.YAMLError:
+        return {}
+
+@tool
+def parse_table(table_content: str) -> Table:
+    # Assuming table_content is in a format that pandas can read directly
+    df = pd.read_html("<table>" + table_content + "</table>")[0]
+    return Table(headers=df.columns.tolist(), rows=df.to_dict(orient="records"))
+
+@tool
+def parse_python_script(script: str) -> SourceCode:
+    extracted_imports = []
+    extracted_classes = []
+    extracted_context = ""
+    extracted_metadata = {}
+
+    try:
+        tree = ast.parse(script)
+    except SyntaxError as e:
+        return SourceCode(
+            id="error",
+            imports=[],
+            classes=[],
+            code=script,
+            syntax="Python",
+            context="Syntax error in provided script",
+            metadata={"error": str(e)}
+        )
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            extracted_imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            extracted_imports.append(node.module)
+        elif isinstance(node, ast.ClassDef):
+            extracted_classes.append(node.name)
+
+    return SourceCode(
+        id="generated_id",
+        imports=extracted_imports,
+        classes=extracted_classes,
+        code=script,
+        syntax="Python",
+        context=extracted_context,
+        metadata=extracted_metadata
+    )
+
+@tool
+def parse_markdown_content(markdown_path: str) -> MarkdownDocument:
+    loader = UnstructuredMarkdownLoader(markdown_path, mode="elements")
+    markdown_elements = loader.load()
+
+    extracted_metadata = {}
+    extracted_tables = []
+    extracted_code_blocks = []
+    extracted_content = []
+
+    for element in markdown_elements:
+        if element['type'] == 'yaml':
+            extracted_metadata.update(parse_yaml_metadata(element['content']))
+        elif element['type'] == 'table':
+            extracted_tables.append(parse_table(element['content']))
+        elif element['type'] == 'code' and element['language'] == 'python':
+            extracted_code_blocks.append(parse_python_code_block(element['content']))
+        else:
+            extracted_content.append(element['content'])
+
+    return MarkdownDocument(
+        metadata=extracted_metadata,
+        tables=extracted_tables,
+        code_blocks=extracted_code_blocks,
+        content="\\n".join(extracted_content)
+    )
+    
+
+parse_yaml_metadata_tool = Tool.from_function(
+    func=parse_yaml_metadata,
+    name="parse_yaml_metadata",
+    description="Parses YAML metadata from a string"
+),
+
+parse_table_tool = Tool.from_function(
+    func=parse_table,
+    name="parse_table",
+    description="Parses table content into a Table object"
+),
+
+parse_python_script_tool = Tool.from_function(
+    func=parse_python_script,
+    name="parse_python_script",
+    description="Parses a Python script into a SourceCode object"
+),
+
+parse_markdown_content_tool = Tool.from_function(
+    func=parse_markdown_content,
+    name="parse_markdown_content",
+    description="Parses Markdown content into a MarkdownDocument object"
+)
+
+PROMPT = """
+Analyze the following Python script:
+Script:
+{script}
+Extracted Components:
+- Imports:
+- Classes:
+- Other relevant details:
+"""
+
+class SourceCodePromptTemplate(StringPromptTemplate):
+    def format(self, script: str) -> str:
+        return PROMPT.format(script=script)
+
+class MarkdownDocumentPromptTemplate(StringPromptTemplate):
+    def format(self, markdown_content: str) -> str:
+        return f"""
+Analyze the following Markdown content to map data to new MarkdownDocument:
+Content:
+{markdown_content}
+Extracted Components:
+- Metadata: {{metadata}}
+- Tables: {{tables}}
+- Code Blocks: {{code_blocks}}
+- Other relevant content details: {{other_content}}
+"""
+
+class PythonScriptPromptTemplate(StringPromptTemplate):
+    def format(self, script: str) -> str:
+        return f"""
+Analyze the following Python script:
+Script:
+{script}
+Extracted Components:
+- Imports:
+- Classes:
+- Other relevant details:
+"""
+
+llm = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+tools = [
+    parse_yaml_metadata_tool,
+    parse_table_tool,
+    parse_python_script_tool,
+    parse_markdown_content_tool
+]
+
+prompt_template = SourceCodePromptTemplate()
+python_script_prompt_template = PythonScriptPromptTemplate()
+markdown_document_prompt_template = MarkdownDocumentPromptTemplate()
+
+def agent_logic(input_data: dict):
+    filename = input_data.get("filename", "")
+    input_text = input_data.get("content", "")
+
+    if filename.endswith('.py') or filename.endswith('.ipynb'):
+        '''
+        Process as Python script or Jupyter notebook 
+        (( 
+        :adjust notebook logic to...
+        ::only python cells as code 
+        ::markdown/text as context 
+        ))
+        '''
+        return python_script_prompt_template.format(input_text)
+    elif filename.endswith('.md'):
+        if '```python' in input_text:
+            return python_script_prompt_template.format(input_text)
+        else:
+            return markdown_document_prompt_template.format(input_text)
+    else:
+        return input
+
+agent = (
+    {"input": lambda x: x["input"]}  # "input" is the stringified script
+    | prompt_template
+    | llm.bind(functions=tools)
+    | (lambda output: agent_logic(output))
+)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
