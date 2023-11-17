@@ -135,32 +135,37 @@ parse_markdown_content_tool = Tool.from_function(
     description="Parses Markdown content into a MarkdownDocument object"
 )
 
-PROMPT = """
-Analyze the following Python script:
-Script:
-{script}
-Extracted Components:
-- Imports:
-- Classes:
-- Other relevant details:
-"""
+## Python Prompt Templating 
 
-class SourceCodePromptTemplate(StringPromptTemplate):
-    def format(self, script: str) -> str:
-        return PROMPT.format(script=script)
+MARKDOWN_DOCUMENT_ANALYSIS_PROMPT = """
+# Markdown Document Analysis
 
-class MarkdownDocumentPromptTemplate(StringPromptTemplate):
-    def format(self, markdown_content: str) -> str:
-        return f"""
-Analyze the following Markdown content to map data to new MarkdownDocument:
-Content:
+**Markdown Content for Analysis:**
 {markdown_content}
-Extracted Components:
-- Metadata: {{metadata}}
-- Tables: {{tables}}
-- Code Blocks: {{code_blocks}}
-- Other relevant content details: {{other_content}}
+
+**Task:**
+Analyze the provided Markdown content and extract its components, mapping them to a new MarkdownDocument object. Focus on the following aspects:
+
+**Extracted Components:**
+- **Metadata**: Extract and summarize any metadata present in the document.
+- **Tables**: Identify and describe tables in the document, including headers and row data.
+- **Code Blocks**: Enumerate the code blocks present, especially focusing on their content and language syntax.
+- **Other Content**: Highlight other significant content details such as headings, paragraphs, lists, and links.
+
+**Instructions:**
+- Provide a comprehensive analysis covering all key components of the Markdown content.
+- Use a structured format to present the extracted components clearly.
+- Ensure that each component is accurately represented as per its significance in the document.
+- Offer additional insights or context where relevant.
+
+---
 """
+
+class MarkdownDocumentAnalysisPromptTemplate(StringPromptTemplate):
+    def format(self, markdown_content: str) -> str:
+        return MARKDOWN_DOCUMENT_ANALYSIS_PROMPT.format(markdown_content=markdown_content)
+
+## Python Prompt Templating 
 
 class PythonScriptPromptTemplate(StringPromptTemplate):
     def format(self, script: str) -> str:
@@ -174,6 +179,35 @@ Extracted Components:
 - Other relevant details:
 """
 
+PYTHON_SCRIPT_ANALYSIS_PROMPT = """
+# Python Script Analysis
+
+Script for Analysis:
+{script}
+
+**Task:
+Analyze the Python script and extract its components, mapping them to a new SourceCode object. Focus on the following aspects:
+
+**Extracted Components:**
+- **Imports**: List all the modules and libraries imported in the script.
+- **Classes**: Enumerate the classes defined in the script along with a brief description of their purpose.
+- **Functions**: Outline the functions, their roles, and interactions within the script.
+- **Syntax**: Specify the programming language syntax/extension used.
+- **Context**: Describe any additional context, such as markdown, comments, or docstrings.
+- **Metadata**: Provide any relevant metadata extracted or generated for cataloging and code object management.
+
+**Instructions:**
+- Ensure the analysis is thorough and detailed, covering all major components of the script.
+- Use clear and concise language to describe each component.
+- Maintain the structure of the SourceCode object in the response.
+
+---
+"""
+
+class PythonScriptAnalysisPromptTemplate(StringPromptTemplate):
+    def format(self, script: str) -> str:
+        return PYTHON_SCRIPT_ANALYSIS_PROMPT.format(script=script)
+
 llm = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 tools = [
@@ -184,28 +218,20 @@ tools = [
 ]
 
 prompt_template = SourceCodePromptTemplate()
-python_script_prompt_template = PythonScriptPromptTemplate()
-markdown_document_prompt_template = MarkdownDocumentPromptTemplate()
+python_script_analysis_prompt_template = PythonScriptPromptTemplate()
+markdown_document_analysis_prompt_template = MarkdownDocumentPromptTemplate()
 
 def agent_logic(input_data: dict):
     filename = input_data.get("filename", "")
     input_text = input_data.get("content", "")
-
-    if filename.endswith('.py') or filename.endswith('.ipynb'):
-        '''
-        Process as Python script or Jupyter notebook 
-        (( 
-        :adjust notebook logic to...
-        ::only python cells as code 
-        ::markdown/text as context 
-        ))
-        '''
-        return python_script_prompt_template.format(input_text)
+    
+    elif filename.endswith('.py') or filename.endswith('.ipynb'):
+        return python_script_prompt_template.format(input_text) 
     elif filename.endswith('.md'):
         if '```python' in input_text:
             return python_script_prompt_template.format(input_text)
         else:
-            return markdown_document_prompt_template.format(input_text)
+            return markdown_document_analysis_prompt_template.format(input_text)
     else:
         return input
 
