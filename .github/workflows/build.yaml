@@ -1,15 +1,33 @@
-name: Build
+name: Build Python Package
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.py'
+      - 'setup.py'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v2
+
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
         python-version: '3.8'
-    - name: Build script
-      run: echo "Build steps here"
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Build package
+      run: |
+        python setup.py sdist bdist_wheel
+
+    - name: Install package
+      run: |
+        pip install .
