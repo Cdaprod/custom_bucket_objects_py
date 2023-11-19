@@ -91,6 +91,7 @@ paths:
     post:
       summary: Perform an action with MinIO client
       requestBody:
+      operationId: minioAction
         required: true
         content:
           application/json:
@@ -114,6 +115,7 @@ paths:
     post:
       summary: Perform an action with Weaviate client
       requestBody:
+      operationId: weaviateAction
         required: true
         content:
           application/json:
