@@ -6,6 +6,7 @@ import os
 import yaml
 import markdown2
 import re
+from langsmith.run_helpers import traceable
 from langchain.agents import AgentExecutor, tool
 from langchain.llms import OpenAI
 from langchain.schema.runnable import Object, Text
@@ -32,6 +33,7 @@ class MarkdownDocument(BaseModel):
     code_blocks: List[SourceCode] = Field(description="List of code blocks in the document")
     content: str = Field(description="The textual content of the document")
 
+@traceable(run_type="chain")
 @tool
 def parse_yaml_metadata(yaml_content: str) -> dict:
     try:
@@ -39,12 +41,14 @@ def parse_yaml_metadata(yaml_content: str) -> dict:
     except yaml.YAMLError:
         return {}
 
+@traceable(run_type="chain")
 @tool
 def parse_table(table_content: str) -> Table:
     # Assuming table_content is in a format that pandas can read directly
     df = pd.read_html("<table>" + table_content + "</table>")[0]
     return Table(headers=df.columns.tolist(), rows=df.to_dict(orient="records"))
 
+@traceable(run_type="chain")
 @tool
 def parse_python_script(script: str) -> SourceCode:
     extracted_imports = []
@@ -83,6 +87,7 @@ def parse_python_script(script: str) -> SourceCode:
         metadata=extracted_metadata
     )
 
+@traceable(run_type="llm")
 @tool
 def parse_markdown_content(markdown_path: str) -> MarkdownDocument:
     loader = UnstructuredMarkdownLoader(markdown_path, mode="elements")
@@ -208,6 +213,72 @@ class PythonScriptAnalysisPromptTemplate(StringPromptTemplate):
     def format(self, script: str) -> str:
         return PYTHON_SCRIPT_ANALYSIS_PROMPT.format(script=script)
 
+class EnhancedGeneralAnalysisPromptTemplate(StringPromptTemplate):
+    def format(self, input_data: dict) -> str:
+        filename = input_data.get("filename", "")
+        content = input_data.get("content", "")
+
+        if filename.endswith('.py') or filename.endswith('.ipynb'):
+            # For Python script or Jupyter notebook analysis
+            return f"""
+Detailed Analysis of Python Script or Jupyter Notebook:
+Filename: {filename}
+Content:
+{content}
+
+Task:
+- Analyze the structure, logic, and components of the script/notebook.
+- Extract detailed information about Imports, Classes, Functions, Variables, and overall Logic.
+- Identify key programming patterns, algorithms, and data structures used.
+- Provide context, documentation strings, and metadata.
+
+Expected Output Format:
+- Imports: List all libraries and modules with their purposes.
+- Classes: Describe each class, its methods, attributes, and role in the script.
+- Functions: Detail each function, its parameters, return values, and functionality.
+- Variables: Highlight significant variables, their types, and use cases.
+- Structure: Outline the script's flow and logic.
+- Context and Metadata: Include any comments, docstrings, and relevant metadata.
+"""
+        elif filename.endswith('.md'):
+            # For Markdown document analysis
+            return f"""
+Detailed Analysis of Markdown Document:
+Filename: {filename}
+Content:
+{content}
+
+Task:
+- Analyze the Markdown document to extract structured information.
+- Focus on Metadata, Tables, Code Blocks, and textual Content.
+- Provide insights into the document's layout, key themes, and structure.
+
+Expected Output Format:
+- Metadata: Extract key metadata and summarize.
+- Tables: Describe each table, its headers, and row data.
+- Code Blocks: Analyze any code blocks, their language, and content.
+- Content: Summarize the main textual content, headings, and lists.
+"""
+        else:
+            # Default analysis for other types of content
+            return f"""
+General Content Analysis:
+Filename: {filename}
+Content:
+{content}
+
+Task:
+- Provide a comprehensive analysis of the content.
+- Focus on extracting key insights, summaries, and relevant details.
+
+Expected Output Format:
+- Key Insights: Highlight the main points and insights.
+- Summary: Provide a concise summary of the content.
+- Details: Include any other relevant information or observations.
+"""
+
+enhanced_general_analysis_prompt_template = EnhancedGeneralAnalysisPromptTemplate()
+
 llm = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 tools = [
@@ -217,28 +288,36 @@ tools = [
     parse_markdown_content_tool
 ]
 
-prompt_template = SourceCodePromptTemplate()
 python_script_analysis_prompt_template = PythonScriptPromptTemplate()
 markdown_document_analysis_prompt_template = MarkdownDocumentPromptTemplate()
+enhanced_general_analysis_prompt_template = EnhancedGeneralAnalysisPromptTemplate()
+
+# def agent_logic(input_data: dict):
+#     filename = input_data.get("filename", "")
+#     input_text = input_data.get("content", "")
+#     elif filename.endswith('.py') or filename.endswith('.ipynb'):
+#         return python_script_prompt_template.format(input_text) 
+#     elif filename.endswith('.md'):
+#         if '```python' in input_text:
+#             return python_script_prompt_template.format(input_text)
+#         else:
+#             return markdown_document_analysis_prompt_template.format(input_text)
+#     else:
+#         return input
+# agent = (
+#     {"input": lambda x: x["input"]}  # "input" is the stringified script
+#     | prompt_template
+#     | llm.bind(functions=tools)
+#     | (lambda output: agent_logic(output))
+# )
+# agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 def agent_logic(input_data: dict):
-    filename = input_data.get("filename", "")
-    input_text = input_data.get("content", "")
-    
-    elif filename.endswith('.py') or filename.endswith('.ipynb'):
-        return python_script_prompt_template.format(input_text) 
-    elif filename.endswith('.md'):
-        if '```python' in input_text:
-            return python_script_prompt_template.format(input_text)
-        else:
-            return markdown_document_analysis_prompt_template.format(input_text)
-    else:
-        return input
+    return enhanced_general_analysis_prompt_template.format(input_data)
 
 agent = (
-    {"input": lambda x: x["input"]}  # "input" is the stringified script
-    | prompt_template
-    | llm.bind(functions=tools)
+    {"input": lambda x: x["input"]}  # "input" is the input data dictionary
     | (lambda output: agent_logic(output))
+    | llm.bind(functions=tools)
 )
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)

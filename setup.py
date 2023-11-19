@@ -15,12 +15,14 @@ setup(
     license='LICENSE.txt',
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=[
+        'ast',
+        
         'langchain',
         'pydantic',
         'pandas',
         'PyYAML',
         'markdown2',
-        'unittest',
+        'langsmith',
     ],
     python_requires='>=3.6',
     classifiers=[
