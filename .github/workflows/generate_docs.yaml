@@ -24,8 +24,7 @@ jobs:
 
     - name: Generate Documentation
       run: |
-        pdoc --html --output-dir docs your_package_name
-
+        pdoc --html --output-dir docs custom_bucket_objects
     - name: Commit and Push Documentation
       env:
         GIT_EMAIL: ${{ secrets.GH_EMAIL }}
