@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '**.py'
+      - 'app/**.py'
 jobs:
   generate-docs:
     runs-on: ubuntu-latest
