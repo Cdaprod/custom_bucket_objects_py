@@ -1,5 +1,5 @@
 import unittest
-from ..main import parse_python_script
+from ..app.main import parse_python_script
 
 class TestParsePythonScript(unittest.TestCase):
 

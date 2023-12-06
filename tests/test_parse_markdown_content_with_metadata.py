@@ -1,5 +1,5 @@
 import unittest
-from ..main import parse_markdown_content, MarkdownDocument
+from ..app.main import parse_markdown_content, MarkdownDocument
 
 def test_parse_valid_markdown_with_metadata(self):
     markdown_content = """

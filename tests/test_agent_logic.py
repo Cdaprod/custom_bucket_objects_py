@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch
-from ..main import agent_logic
+from ..app.main import agent_logic
 
 class TestAgentLogic(unittest.TestCase):
 

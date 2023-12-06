@@ -16,7 +16,6 @@ setup(
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=[
         'ast',
-        
         'langchain',
         'pydantic',
         'pandas',

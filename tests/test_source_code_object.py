@@ -1,5 +1,5 @@
 import unittest
-from ..main import SourceCode
+from ..app.main import SourceCode
 
 class TestSourceCode(unittest.TestCase):
 

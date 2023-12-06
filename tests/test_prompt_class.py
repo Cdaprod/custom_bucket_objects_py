@@ -1,5 +1,5 @@
 import unittest
-from ..main import SourceCodePromptTemplate, MarkdownDocumentPromptTemplate, PythonScriptPromptTemplate
+from ..app.main import SourceCodePromptTemplate, MarkdownDocumentPromptTemplate, PythonScriptPromptTemplate
 
 class TestPromptTemplates(unittest.TestCase):
 
