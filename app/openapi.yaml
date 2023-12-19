@@ -1,7 +1,16 @@
 openapi: 3.0.0
 info:
-  title: LangChain Agent API
-  version: 1.0.0
+  title: Custom Bucket Objects API
+  version: 0.1.0
+  description: API for interacting with the Custom Bucket Objects package
+  contact:
+    name: David Cannan
+    email: Cdaprod@Cdaprod.dev
+    url: https://github.com/Cdaprod/custom_bucket_objects
+servers:
+  - url: http://localhost:5000
+    description: Development server
+
 paths:
   /parse-yaml-metadata:
     post:

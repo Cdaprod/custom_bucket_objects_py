@@ -32,7 +32,8 @@ class MarkdownDocument(BaseModel):
     tables: List[Table] = Field(description="List of tables in the document")
     code_blocks: List[SourceCode] = Field(description="List of code blocks in the document")
     content: str = Field(description="The textual content of the document")
-
+    blob_data: List[blob] = Field(description="The image or video content of the document")
+    
 @traceable(run_type="chain")
 @tool
 def parse_yaml_metadata(yaml_content: str) -> dict:
@@ -97,6 +98,7 @@ def parse_markdown_content(markdown_path: str) -> MarkdownDocument:
     extracted_tables = []
     extracted_code_blocks = []
     extracted_content = []
+    extraxted_blob_data = []
 
     for element in markdown_elements:
         if element['type'] == 'yaml':
@@ -155,6 +157,7 @@ Analyze the provided Markdown content and extract its components, mapping them t
 - **Metadata**: Extract and summarize any metadata present in the document.
 - **Tables**: Identify and describe tables in the document, including headers and row data.
 - **Code Blocks**: Enumerate the code blocks present, especially focusing on their content and language syntax.
+- **Blob Data**: Enumerate any image, video, or audio data present, converting it into binary blobs for img-2-vec transformation.
 - **Other Content**: Highlight other significant content details such as headings, paragraphs, lists, and links.
 
 **Instructions:**
